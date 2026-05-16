@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>滴答清单 - 收集箱</title>
+  <style>
+    /* 基础重置 */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      color: #333;
+      background-color: #fff;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+    }
+
+    img, svg { display: block; }
+
+    /* ========================================= */
+    /* 状态控制类 */
+    /* ========================================= */
+    .is-hidden { display: none !important; }
+
+    /* ========================================= */
+    /* 左侧极窄导航栏 */
+    /* ========================================= */
+    .sidebar-mini {
+      width: 64px;
+      flex-shrink: 0;
+      background-color: #f7f7f7;
+      border-right: 1px solid #eee;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px 0;
+      justify-content: space-between;
+    }
+
+    .mini-top {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+    }
+
+    .icon-btn {
+      width: 40px;
+      height: 40px;
+      border-radius: 8px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      cursor: pointer;
+      background-color: transparent;
+    }
+
+    .icon-btn img {
+      width: 32px;
+      height: 32px;
+      filter: brightness(0) invert(60%);
+      transition: filter 0.2s ease;
+    }
+
+    .icon-btn:hover img { filter: brightness(0) invert(45%); }
+    .icon-btn.active img { filter: brightness(0) invert(15%); }
+
+    /* ========================================= */
+    /* 拖拽条样式 (Resizer) */
+    /* ========================================= */
+    .resizer {
+      width: 8px;
+      cursor: ew-resize;
+      position: relative;
+      z-index: 10;
+      background-color: transparent;
+      margin: 0 -4px;
+    }
+    .resizer::before {
+      content: '';
+      position: absolute;
+      left: 3px;
+      top: 0;
+      bottom: 0;
+      width: 1px;
+      background-color: #eee;
+    }
+
+    /* ========================================= */
+    /* 左侧菜单栏 */
+    /* ========================================= */
+    .menu-icon { width: 20px; height: 20px; }
+    .color-circle { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
+    .header-icon { width: 24px; height: 24px; }
+
+    .toggle-icon { transition: transform 0.2s ease; }
+    .toggle-icon.is-mirrored { transform: scaleX(-1); }
+
+    .action-icon { width: 22px; height: 22px; cursor: pointer; }
+    .input-icon { width: 18px; height: 18px; margin-right: 10px; }
+    .task-checkbox-icon { width: 20px; height: 20px; margin-right: 12px; cursor: pointer; }
+
+    .sidebar-main {
+      width: 240px;
+      flex-shrink: 0;
+      background-color: #f7f7f7;
+      display: flex;
+      flex-direction: column;
+      padding-top: 0;
+    }
+
+    .menu-list { padding: 10px; flex: 1; overflow-y: auto; }
+    .menu-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      margin-bottom: 2px;
+      font-size: 14px;
+      color: #333;
+      position: relative;
+    }
+    .menu-item:hover { background-color: #ebebeb; }
+    .menu-item.active { background-color: #e0e0e0; font-weight: 500; }
+    .menu-left { display: flex; align-items: center; gap: 10px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;}
+
+    /* --- 右侧数字与三个点切换逻辑 --- */
+    .menu-right {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      flex-shrink: 0;
+    }
+
+    .menu-count {
+      font-size: 12px;
+      color: #aaa;
+      transition: opacity 0.2s;
+    }
+
+    .more-dots {
+      position: absolute;
+      inset: 0; /* 完全覆盖右侧区域 */
+      display: flex;
+      opacity: 0;
+      pointer-events: none;
+      justify-content: center;
+      align-items: center;
+      border-radius: 4px;
+      transition: background-color 0.2s, opacity 0.15s;
+    }
+    .more-dots img {
+      width: 16px;
+      height: 16px;
+      filter: brightness(0) invert(60%);
+    }
+    .more-dots:hover { background-color: #dcdcdc; }
+
+    /* 悬浮控制 */
+    .menu-item:hover .menu-count { opacity: 0; } /* 隐藏数字 */
+    .menu-item:hover .more-dots { opacity: 1; pointer-events: auto; } /* 显示三个点 */
+
+
+    .divider { height: 1px; background-color: #e8e8e8; margin: 12px 10px; }
+
+    .section-group { margin-top: 10px; }
+    .section-header-btn {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 10px;
+      background-color: transparent;
+      border-radius: 6px;
+      cursor: pointer;
+      margin-bottom: 6px;
+      transition: background-color 0.2s;
+    }
+    .section-header-btn:hover { background-color: #ebebeb; }
+    .section-title-left { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #777; font-weight: 500; }
+    .arrow-icon { width: 14px; height: 14px; transition: transform 0.2s ease; }
+    .arrow-icon.is-collapsed { transform: rotate(-90deg); }
+    .plus-icon { width: 16px; height: 16px; filter: brightness(0) invert(60%); }
+
+    /* ========================================= */
+    /* 主内容区（任务列表） */
+    /* ========================================= */
+    .main-content {
+      width: 500px;
+      flex-shrink: 0;
+      background-color: #fff;
+      display: flex;
+      flex-direction: column;
+    }
+    .header { display: flex; justify-content: space-between; align-items: center; padding: 24px 30px 16px; }
+    .header-title { display: flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 600; }
+    .task-input-container { padding: 0 30px; margin-bottom: 20px; }
+    .task-input {
+      display: flex; align-items: center; background-color: #f7f7f7;
+      border-radius: 6px; padding: 12px 16px; color: #999; cursor: text;
+    }
+    .task-input input { border: none; background: transparent; outline: none; width: 100%; font-size: 14px; }
+    .task-list { padding: 0 30px; }
+    .task-item { display: flex; align-items: center; padding: 12px 0; border-bottom: 1px solid #f0f0f0; cursor: pointer; }
+    .task-title { flex: 1; font-size: 14px; color: #a0a0a0; }
+    .task-date { font-size: 13px; color: #4285f4; }
+    .right-panel { flex: 1; background-color: #fff; display: flex; justify-content: center; align-items: center; }
+
+    /* ========================================= */
+    /* 弹出菜单项 (下拉菜单) */
+    /* ========================================= */
+    .dropdown-menu {
+      position: fixed; background: #fff; border-radius: 8px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.1); padding: 6px 0; width: 120px; z-index: 100; border: 1px solid #eee;
+    }
+    .dropdown-item { padding: 8px 16px; font-size: 14px; color: #333; cursor: pointer; }
+    .dropdown-item:hover { background-color: #f5f5f5; }
+
+    /* ========================================= */
+    /* 模态框通用样式 */
+    /* ========================================= */
+    .modal-overlay {
+      position: fixed; inset: 0; background-color: rgba(0, 0, 0, 0.4);
+      display: flex; justify-content: center; align-items: center; z-index: 999;
+    }
+    .modal-box { background: #fff; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); width: 400px; position: relative; }
+    .modal-footer { display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px;}
+    .btn { padding: 8px 16px; border-radius: 6px; font-size: 14px; cursor: pointer; border: 1px solid transparent; }
+    .btn-cancel { background: #fff; border-color: #e0e0e0; color: #555; }
+    .btn-cancel:hover { background: #f9f9f9; }
+    .btn-primary { background: #4a72ff; color: #fff; }
+    .btn-primary:hover { background: #3a62ef; }
+
+    /* 删除弹窗 */
+    #delete-modal .modal-box { padding: 24px; }
+    .delete-header { display: flex; justify-content: space-between; align-items: center; font-size: 18px; font-weight: 600; margin-bottom: 12px;}
+    .delete-close { cursor: pointer; font-size: 20px; color: #999; }
+    .delete-desc { color: #666; font-size: 14px; }
+
+    /* 编辑弹窗 */
+    #edit-modal .modal-box { padding: 20px; width: 420px; }
+    .edit-title { text-align: center; font-size: 16px; font-weight: 600; margin-bottom: 20px; }
+    .edit-input-wrapper { display: flex; align-items: center; border: 1px solid #4a72ff; border-radius: 6px; padding: 8px 12px; margin-bottom: 20px; }
+    .edit-input-wrapper input { border: none; outline: none; flex: 1; font-size: 14px; margin-left: 10px; }
+    .color-row { display: flex; align-items: center; margin-bottom: 10px; }
+    .color-label { font-size: 14px; color: #555; width: 70px; }
+    .color-options { display: flex; gap: 10px; flex: 1; }
+    .color-option { width: 20px; height: 20px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; transition: transform 0.1s; }
+    .color-option.selected { border-color: rgba(0,0,0,0.2); transform: scale(1.15); box-shadow: 0 0 0 1px #fff inset; }
+
+    /* 彩色自定义圆样式 */
+    .rainbow-option {
+      background: conic-gradient(from 90deg, #ff0000, #ff8000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000) !important;
+      border: none !important;
+    }
+    .rainbow-option.selected { box-shadow: 0 0 0 2px #fff inset, 0 0 0 1px rgba(0,0,0,0.2) !important; transform: scale(1.15); }
+
+    /* --- 自定义颜色模态框 --- */
+    #custom-color-modal .modal-box { padding: 20px; width: 320px; z-index: 1001; }
+    .color-picker-area { height: 160px; border-radius: 4px; position: relative; overflow: hidden; cursor: crosshair; }
+    .color-picker-thumb { width: 14px; height: 14px; border: 2px solid #fff; border-radius: 50%; position: absolute; transform: translate(-50%, -50%); box-shadow: 0 1px 4px rgba(0,0,0,0.5); pointer-events: none; }
+    .hue-slider-container { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
+    .hue-preview { width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.1); }
+    .hue-track { flex: 1; height: 12px; border-radius: 6px; background: linear-gradient(to right, #f00 0%, #ff0 17%, #0f0 33%, #0ff 50%, #00f 67%, #f0f 83%, #f00 100%); position: relative; cursor: pointer; }
+    .hue-thumb { width: 18px; height: 18px; background: #fff; border-radius: 50%; border: 1px solid #ddd; position: absolute; top: 50%; transform: translate(-50%, -50%); box-shadow: 0 1px 3px rgba(0,0,0,0.2); pointer-events: none; }
+    .hex-input-container { margin-top: 20px; text-align: center; }
+    .hex-input-box { border: 1px solid #e0e0e0; border-radius: 4px; padding: 8px; display: flex; justify-content: space-between; align-items: center; }
+    .hex-input-box input { border: none; outline: none; width: 100%; text-align: center; font-size: 14px; color: #333; }
+    .hex-label { font-size: 12px; color: #999; margin-top: 8px; }
+
+  </style>
+</head>
+<body>
+
+<div class="sidebar-mini">
+  <div class="mini-top">
+    <div class="icon-btn"><img src="svg/svgexport-2.svg" alt=""></div>
+    <div class="icon-btn active"><img src="svg/svgexport-3.svg" alt=""></div>
+    <div class="icon-btn"><img src="svg/svgexport-4.svg" alt=""></div>
+    <div class="icon-btn"><img src="svg/svgexport-5.svg" alt=""></div>
+    <div class="icon-btn"><img src="svg/svgexport-6.svg" alt=""></div>
+    <div class="icon-btn"><img src="svg/svgexport-7.svg" alt=""></div>
+  </div>
+</div>
+
+<div class="sidebar-main" id="sidebar-menu">
+  <div class="menu-list">
+    <div class="menu-item"><div class="menu-left"><img src="svg/svgexport-12.svg" class="menu-icon" alt=""> 今天</div></div>
+    <div class="menu-item"><div class="menu-left"><img src="svg/svgexport-14.svg" class="menu-icon" alt=""> 最近7天</div></div>
+    <div class="menu-item active"><div class="menu-left"><img src="svg/svgexport-15.svg" class="menu-icon" alt=""> 收集箱</div></div>
+    <div class="divider"></div>
+
+    <div class="section-group">
+      <div class="section-header-btn" id="list-toggle-btn">
+        <div class="section-title-left">
+          <img src="svg/svgexport-24.svg" class="arrow-icon" id="list-arrow" alt="">
+          <span>清单</span>
+        </div>
+      </div>
+
+      <div class="section-content" id="list-content"></div>
+    </div>
+    <div class="divider"></div>
+    <div class="menu-item"><div class="menu-left"><img src="svg/svgexport-20.svg" class="menu-icon" alt=""> 已完成</div></div>
+    <div class="menu-item"><div class="menu-left"><img src="svg/svgexport-21.svg" class="menu-icon" alt=""> 垃圾桶</div></div>
+  </div>
+</div>
+
+<div class="resizer" id="resizer-1"></div>
+
+<div class="main-content" id="main-content">
+  <div class="header">
+    <div class="header-title">
+      <img src="svg/svgexport-23.svg" class="header-icon toggle-icon is-mirrored" id="toggle-sidebar-btn" style="cursor: pointer;" alt="Toggle Sidebar">
+      收集箱
+    </div>
+  </div>
+  <div class="task-input-container">
+    <div class="task-input">
+      <img src="svg/svgexport-27.svg" class="input-icon" alt="">
+      <input type="text" placeholder="添加任务">
+    </div>
+  </div>
+  <div class="task-list">
+    <div class="task-item">
+      <div class="task-title">无标题</div>
+      <div class="task-date">今天</div>
+    </div>
+  </div>
+</div>
+
+<div class="resizer" id="resizer-2"></div>
+<div class="right-panel"></div>
+
+<div id="action-dropdown" class="dropdown-menu is-hidden">
+  <div class="dropdown-item" id="btn-edit-item">编辑</div>
+  <div class="dropdown-item" id="btn-delete-item">删除</div>
+</div>
+
+<div id="delete-modal" class="modal-overlay is-hidden">
+  <div class="modal-box">
+    <div class="delete-header">
+      <span id="delete-modal-title">删除清单？</span>
+      <span class="delete-close" onclick="closeModals()">×</span>
+    </div>
+    <div class="delete-desc">清单中的所有任务将被删除。</div>
+    <div class="modal-footer">
+      <button class="btn btn-cancel" onclick="closeModals()">取消</button>
+      <button class="btn btn-primary" id="confirm-delete-btn">删除</button>
+    </div>
+  </div>
+</div>
+
+<div id="edit-modal" class="modal-overlay is-hidden">
+  <div class="modal-box">
+    <div class="edit-title">编辑清单</div>
+    <div class="edit-input-wrapper">
+      <div id="edit-modal-icon" class="color-circle"></div>
+      <input type="text" id="edit-modal-input">
+    </div>
+    <div class="color-row">
+      <div class="color-label">清单颜色</div>
+      <div class="color-options" id="color-picker-container"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-cancel" onclick="closeModals()">取消</button>
+      <button class="btn btn-primary" id="confirm-edit-btn">保存</button>
+    </div>
+  </div>
+</div>
+
+<div id="custom-color-modal" class="modal-overlay is-hidden" style="z-index: 1000;">
+  <div class="modal-box">
+    <div id="custom-color-area" class="color-picker-area">
+      <div style="background: linear-gradient(to right, #fff, rgba(255,255,255,0)); width: 100%; height: 100%; position: absolute; pointer-events: none;"></div>
+      <div style="background: linear-gradient(to top, #000, rgba(0,0,0,0)); width: 100%; height: 100%; position: absolute; pointer-events: none;"></div>
+      <div id="custom-color-pointer" class="color-picker-thumb"></div>
+    </div>
+    <div class="hue-slider-container">
+      <div id="custom-color-preview" class="hue-preview"></div>
+      <div id="custom-hue-track" class="hue-track">
+        <div id="custom-hue-pointer" class="hue-thumb"></div>
+      </div>
+    </div>
+    <div class="hex-input-container">
+      <div class="hex-input-box">
+        <input type="text" id="custom-hex-input" value="#000000">
+        <div style="display:flex; flex-direction: column; color: #999; cursor: pointer;">
+          <svg width="12" height="12" viewBox="0 0 24 24"><path d="M12 8l4 4H8z" fill="currentColor"/><path d="M12 16l-4-4h8z" fill="currentColor"/></svg>
+        </div>
+      </div>
+      <div class="hex-label">HEX</div>
+    </div>
+    <div class="modal-footer" style="margin-top: 16px;">
+      <button class="btn btn-cancel" onclick="closeCustomColorModal()">取消</button>
+      <button class="btn btn-primary" id="save-custom-color-btn">保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // === 0. 数据库 (LocalStorage) 模拟逻辑 ===
+  const DB_KEY = 'ticktick_mock_lists';
+  const defaultData = [
+    { id: '1', name: '欢迎', color: '#ffb74d', count: 0 },
+    { id: '2', name: '测试', color: '#f06292', count: 3 },
+    { id: '3', name: '个人备忘', color: '#64b5f6', count: 0 },
+    { id: '4', name: '学习安排', color: '#8bc34a', count: 12 }
+  ];
+
+  function getListsData() {
+    const data = localStorage.getItem(DB_KEY);
+    return data ? JSON.parse(data) : defaultData;
+  }
+
+  function saveListsData(data) {
+    localStorage.setItem(DB_KEY, JSON.stringify(data));
+  }
+
+  // 动态渲染列表
+  function renderLists() {
+    const container = document.getElementById('list-content');
+    container.innerHTML = ''; // 清空容器
+    const lists = getListsData();
+
+    lists.forEach(list => {
+      // 如果count > 0才显示具体数字，否则为空字符串
+      const countDisplay = list.count > 0 ? list.count : '';
+
+      const html = `
+        <div class="menu-item list-item" data-id="${list.id}" data-color="${list.color}">
+          <div class="menu-left">
+            <div class="color-circle" style="background-color: ${list.color};"></div>
+            <span class="list-name">${list.name}</span>
+          </div>
+          <div class="menu-right">
+            <div class="menu-count">${countDisplay}</div>
+            <div class="more-dots"><img src="svg/svgexport-26.svg" alt="more"></div>
+          </div>
+        </div>
+      `;
+      container.insertAdjacentHTML('beforeend', html);
+    });
+  }
+
+  // 初始化加载
+  renderLists();
+
+
+  // === 全局变量 ===
+  const colorList = ['#f44336', '#ff9800', '#ffeb3b', '#8bc34a', '#4caf50', '#2196f3', '#3f51b5', '#9c27b0'];
+  let currentActiveListId = null; // 记录当前操作的列表ID
+  let selectedEditColor = '#4a72ff';
+
+  const dropdown = document.getElementById('action-dropdown');
+
+  // === 1. 下拉菜单触发逻辑 ===
+  document.addEventListener('click', (e) => {
+    const dotsBtn = e.target.closest('.more-dots');
+    if (!dotsBtn && !e.target.closest('.dropdown-menu')) {
+      dropdown.classList.add('is-hidden');
+      return;
+    }
+    if (dotsBtn) {
+      e.stopPropagation();
+      const listItem = dotsBtn.closest('.list-item');
+      currentActiveListId = listItem.dataset.id; // 获取对应ID
+
+      const rect = dotsBtn.getBoundingClientRect();
+      dropdown.style.top = (rect.bottom + 4) + 'px';
+      dropdown.style.left = (rect.left - 80) + 'px';
+      dropdown.classList.remove('is-hidden');
+    }
+  });
+
+  function closeModals() {
+    document.getElementById('delete-modal').classList.add('is-hidden');
+    document.getElementById('edit-modal').classList.add('is-hidden');
+    currentActiveListId = null;
+  }
+
+  // === 2. 删除逻辑 ===
+  const btnDeleteItem = document.getElementById('btn-delete-item');
+  const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
+  const deleteModalTitle = document.getElementById('delete-modal-title');
+
+  btnDeleteItem.addEventListener('click', () => {
+    dropdown.classList.add('is-hidden');
+    if(currentActiveListId) {
+      const lists = getListsData();
+      const targetList = lists.find(l => l.id === currentActiveListId);
+      if(targetList) {
+        deleteModalTitle.innerText = `删除清单“${targetList.name}”？`;
+        document.getElementById('delete-modal').classList.remove('is-hidden');
+      }
+    }
+  });
+
+  // 确认删除并更新LocalStorage
+  confirmDeleteBtn.addEventListener('click', () => {
+    if(currentActiveListId) {
+      let lists = getListsData();
+      lists = lists.filter(l => l.id !== currentActiveListId); // 过滤掉被删的项
+      saveListsData(lists);
+      renderLists(); // 重新渲染UI
+    }
+    closeModals();
+  });
+
+
+  // === 3. 编辑逻辑 ===
+  const btnEditItem = document.getElementById('btn-edit-item');
+  const editModalIcon = document.getElementById('edit-modal-icon');
+  const editModalInput = document.getElementById('edit-modal-input');
+  const colorPickerContainer = document.getElementById('color-picker-container');
+
+  function renderColorPicker(activeColor) {
+    colorPickerContainer.innerHTML = '';
+
+    colorList.forEach(color => {
+      const circle = document.createElement('div');
+      circle.className = 'color-option';
+      circle.style.backgroundColor = color;
+      if(color === activeColor) circle.classList.add('selected');
+
+      circle.addEventListener('click', () => {
+        colorPickerContainer.querySelectorAll('.color-option').forEach(el => el.classList.remove('selected'));
+        circle.classList.add('selected');
+        selectedEditColor = color;
+        editModalIcon.style.backgroundColor = color;
+      });
+      colorPickerContainer.appendChild(circle);
+    });
+
+    const rainbowCircle = document.createElement('div');
+    rainbowCircle.className = 'color-option rainbow-option';
+    if (!colorList.includes(activeColor)) {
+      rainbowCircle.classList.add('selected');
+    }
+
+    rainbowCircle.addEventListener('click', () => {
+      document.getElementById('custom-color-modal').classList.remove('is-hidden');
+      const hsv = hexToHsv(selectedEditColor);
+      customH = hsv.h; customS = hsv.s; customV = hsv.v;
+      updateCustomColorUI();
+    });
+
+    colorPickerContainer.appendChild(rainbowCircle);
+  }
+
+  btnEditItem.addEventListener('click', () => {
+    dropdown.classList.add('is-hidden');
+    if(currentActiveListId) {
+      const lists = getListsData();
+      const targetList = lists.find(l => l.id === currentActiveListId);
+
+      if(targetList) {
+        editModalInput.value = targetList.name;
+        selectedEditColor = targetList.color;
+        editModalIcon.style.backgroundColor = selectedEditColor;
+
+        renderColorPicker(selectedEditColor);
+        document.getElementById('edit-modal').classList.remove('is-hidden');
+      }
+    }
+  });
+
+  // 确认编辑并更新LocalStorage
+  document.getElementById('confirm-edit-btn').addEventListener('click', () => {
+    if(currentActiveListId) {
+      const lists = getListsData();
+      const targetIndex = lists.findIndex(l => l.id === currentActiveListId);
+
+      if(targetIndex > -1) {
+        lists[targetIndex].name = editModalInput.value;
+        lists[targetIndex].color = selectedEditColor;
+        saveListsData(lists);
+        renderLists(); // 重新渲染UI
+      }
+    }
+    closeModals();
+  });
+
+
+  // === 4. 自定义颜色算法与弹窗交互 (保持不变) ===
+  let isDraggingHue = false; let isDraggingColor = false;
+  let customH = 0, customS = 1, customV = 1;
+
+  function closeCustomColorModal() {
+    document.getElementById('custom-color-modal').classList.add('is-hidden');
+  }
+
+  function hsvToHex(h, s, v) {
+    let r, g, b;
+    let i = Math.floor(h * 6), f = h * 6 - i;
+    let p = v * (1 - s), q = v * (1 - f * s), t = v * (1 - (1 - f) * s);
+    switch (i % 6) {
+      case 0: r = v, g = t, b = p; break;
+      case 1: r = q, g = v, b = p; break;
+      case 2: r = p, g = v, b = t; break;
+      case 3: r = p, g = q, b = v; break;
+      case 4: r = t, g = p, b = v; break;
+      case 5: r = v, g = p, b = q; break;
+    }
+    const toHex = x => {
+      const hex = Math.round(x * 255).toString(16);
+      return hex.length === 1 ? '0' + hex : hex;
+    };
+    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+  }
+
+  function hexToHsv(hex) {
+    hex = hex.replace(/^#/, '');
+    if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+    if (hex.length !== 6) return { h: 0, s: 1, v: 1 };
+
+    let r = parseInt(hex.slice(0,2), 16) / 255, g = parseInt(hex.slice(2,4), 16) / 255, b = parseInt(hex.slice(4,6), 16) / 255;
+    let max = Math.max(r, g, b), min = Math.min(r, g, b);
+    let h = 0, s = 0, v = max, d = max - min;
+    s = max === 0 ? 0 : d / max;
+    if (max !== min) {
+      switch (max) {
+        case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+        case g: h = (b - r) / d + 2; break;
+        case b: h = (r - g) / d + 4; break;
+      }
+      h /= 6;
+    }
+    return { h, s, v };
+  }
+
+  const hueTrack = document.getElementById('custom-hue-track');
+  const colorArea = document.getElementById('custom-color-area');
+  const hexInput = document.getElementById('custom-hex-input');
+
+  function updateCustomColorUI(updateInput = true) {
+    const finalHex = hsvToHex(customH, customS, customV);
+    document.getElementById('custom-color-area').style.backgroundColor = `hsl(${customH * 360}, 100%, 50%)`;
+    document.getElementById('custom-color-preview').style.backgroundColor = finalHex;
+    document.getElementById('custom-hue-pointer').style.left = `${customH * 100}%`;
+    document.getElementById('custom-color-pointer').style.left = `${customS * 100}%`;
+    document.getElementById('custom-color-pointer').style.top = `${(1 - customV) * 100}%`;
+
+    if (updateInput) hexInput.value = finalHex;
+  }
+
+  function handleHueMove(e) {
+    const rect = hueTrack.getBoundingClientRect();
+    let x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+    customH = x / rect.width;
+    updateCustomColorUI();
+  }
+
+  function handleColorMove(e) {
+    const rect = colorArea.getBoundingClientRect();
+    let x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+    let y = Math.max(0, Math.min(e.clientY - rect.top, rect.height));
+    customS = x / rect.width;
+    customV = 1 - (y / rect.height);
+    updateCustomColorUI();
+  }
+
+  hueTrack.addEventListener('mousedown', (e) => { isDraggingHue = true; handleHueMove(e); });
+  colorArea.addEventListener('mousedown', (e) => { isDraggingColor = true; handleColorMove(e); });
+  document.addEventListener('mousemove', (e) => {
+    if (isDraggingHue) handleHueMove(e);
+    if (isDraggingColor) handleColorMove(e);
+  });
+  document.addEventListener('mouseup', () => { isDraggingHue = false; isDraggingColor = false; });
+
+  hexInput.addEventListener('input', (e) => {
+    let val = e.target.value;
+    if(/^#[0-9A-F]{6}$/i.test(val)) {
+      const hsv = hexToHsv(val);
+      customH = hsv.h; customS = hsv.s; customV = hsv.v;
+      updateCustomColorUI(false);
+    }
+  });
+
+  document.getElementById('save-custom-color-btn').addEventListener('click', () => {
+    selectedEditColor = hexInput.value;
+    document.getElementById('edit-modal-icon').style.backgroundColor = selectedEditColor;
+
+    const cpc = document.getElementById('color-picker-container');
+    cpc.querySelectorAll('.color-option').forEach(el => el.classList.remove('selected'));
+    const rainbowOption = cpc.querySelector('.rainbow-option');
+    if (rainbowOption) rainbowOption.classList.add('selected');
+
+    closeCustomColorModal();
+  });
+
+
+  // === 5. 其他 UI 折叠与缩放交互 ===
+  document.getElementById('list-toggle-btn').addEventListener('click', function(e) {
+    if(e.target.classList.contains('plus-icon')) return;
+    document.getElementById('list-content').classList.toggle('is-hidden');
+    document.getElementById('list-arrow').classList.toggle('is-collapsed');
+  });
+
+  const toggleSidebarBtn = document.getElementById('toggle-sidebar-btn');
+  const sidebarMenu = document.getElementById('sidebar-menu');
+  const resizer1 = document.getElementById('resizer-1');
+  const mainContent = document.getElementById('main-content');
+  let savedMenuWidth = 240;
+
+  toggleSidebarBtn.addEventListener('click', function() {
+    const isHidden = sidebarMenu.classList.contains('is-hidden');
+    let currentMainWidth = mainContent.getBoundingClientRect().width;
+
+    if (!isHidden) {
+      savedMenuWidth = sidebarMenu.getBoundingClientRect().width;
+      sidebarMenu.classList.add('is-hidden');
+      resizer1.classList.add('is-hidden');
+      mainContent.style.width = (currentMainWidth + savedMenuWidth) + 'px';
+      toggleSidebarBtn.classList.remove('is-mirrored');
+    } else {
+      sidebarMenu.classList.remove('is-hidden');
+      resizer1.classList.remove('is-hidden');
+      sidebarMenu.style.width = savedMenuWidth + 'px';
+      mainContent.style.width = (currentMainWidth - savedMenuWidth) + 'px';
+      toggleSidebarBtn.classList.add('is-mirrored');
+    }
+  });
+
+  function makeResizable(resizerEle, leftEle, minW, maxW) {
+    let x = 0, leftWidth = 0;
+    const mouseDownHandler = function (e) {
+      x = e.clientX; leftWidth = leftEle.getBoundingClientRect().width;
+      document.addEventListener('mousemove', mouseMoveHandler);
+      document.addEventListener('mouseup', mouseUpHandler);
+      document.body.style.cursor = 'ew-resize';
+      document.body.style.userSelect = 'none';
+    };
+    const mouseMoveHandler = function (e) {
+      let newWidth = leftWidth + (e.clientX - x);
+      if (newWidth < minW) newWidth = minW;
+      if (newWidth > maxW) newWidth = maxW;
+      leftEle.style.width = `${newWidth}px`;
+    };
+    const mouseUpHandler = function () {
+      document.removeEventListener('mousemove', mouseMoveHandler);
+      document.removeEventListener('mouseup', mouseUpHandler);
+      document.body.style.cursor = 'default';
+      document.body.style.userSelect = 'auto';
+    };
+    resizerEle.addEventListener('mousedown', mouseDownHandler);
+  }
+
+  makeResizable(resizer1, sidebarMenu, 180, 450);
+  makeResizable(document.getElementById('resizer-2'), mainContent, 300, 1500);
+
+</script>
+</body>
+</html>
